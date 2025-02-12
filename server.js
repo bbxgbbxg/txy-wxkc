@@ -24,7 +24,7 @@ const wss = new WebSocketServer({
 wss.on('connection', (ws, request) => {
   const clientIp = request.socket.remoteAddress;
   const clientId = generateId();
-  ws.clientId = clientId;  // 保存客户端ID
+  ws.clientId = clientId;
   
   console.log(`🟢 客户端已连接，IP: ${clientIp}, ID: ${clientId}`);
 
@@ -33,14 +33,10 @@ wss.on('connection', (ws, request) => {
     type: 'welcome',
     id: clientId
   }));
-  // 存储客户端连接
-const clients = new Map();
-
-wss.on('connection', (ws, request) => {
-  const clientIp = request.socket.remoteAddress;
-  const clientId = generateId();
-  ws.clientId = clientId;
+// 存储客户端连接
+  clients.set(clientId, ws);
   
+  console.log(`🟢 客户端已连接，IP: ${clientIp}, ID: ${clientId}`);
   // 存储客户端连接
   clients.set(clientId, ws);
   
@@ -62,21 +58,37 @@ wss.on('connection', (ws, request) => {
       if (msg.type === 'connect') {
         const targetWs = clients.get(msg.targetId);
         if (targetWs) {
-          // 通知目标客户端
+          // 只发送给目标客户端
           targetWs.send(JSON.stringify({
-            type: 'connection-request',
-            fromId: clientId
-          }));
-          // 通知发起方
-          ws.send(JSON.stringify({
-            type: 'connecting',
+            type: 'connect-request',
+            fromId: clientId,
             targetId: msg.targetId
           }));
         } else {
           // 目标客户端不存在
           ws.send(JSON.stringify({
-            type: 'error',
+            type: 'connect-error',
             message: '对方不在线'
+          }));
+        }
+      }
+      // 处理连接接受
+      else if (msg.type === 'connect-accept') {
+        const sourceWs = clients.get(msg.targetId);
+        if (sourceWs) {
+          sourceWs.send(JSON.stringify({
+            type: 'connect-accepted',
+            fromId: clientId
+          }));
+        }
+      }
+      // 处理连接拒绝
+      else if (msg.type === 'connect-reject') {
+        const sourceWs = clients.get(msg.targetId);
+        if (sourceWs) {
+          sourceWs.send(JSON.stringify({
+            type: 'connect-rejected',
+            fromId: clientId
           }));
         }
       }
@@ -92,20 +104,21 @@ wss.on('connection', (ws, request) => {
   });
 });
 
-  // 定期发送心跳包
+ // 定期发送心跳包
   const interval = setInterval(() => {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "ping" }));
     }
-  }, 5000);
+  }, 30000);
 
-  // 连接关闭处理
+// 连接关闭处理
   ws.on('close', () => {
     console.log(`🔴 客户端断开连接，IP: ${clientIp}, ID: ${clientId}`);
+    clients.delete(clientId);
     clearInterval(interval);
   });
 
-  // 错误处理
+ // 错误处理
   ws.on('error', (error) => {
     console.error(`WebSocket 错误 (${clientId}):`, error);
   });
