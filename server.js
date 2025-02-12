@@ -33,21 +33,64 @@ wss.on('connection', (ws, request) => {
     type: 'welcome',
     id: clientId
   }));
+  // 存储客户端连接
+const clients = new Map();
 
+wss.on('connection', (ws, request) => {
+  const clientIp = request.socket.remoteAddress;
+  const clientId = generateId();
+  ws.clientId = clientId;
+  
+  // 存储客户端连接
+  clients.set(clientId, ws);
+  
+  console.log(`🟢 客户端已连接，IP: ${clientIp}, ID: ${clientId}`);
+// 发送欢迎消息和ID
+  ws.send(JSON.stringify({
+    type: 'welcome',
+    id: clientId
+  }));
+
+  
   // 处理客户端消息
   ws.on('message', (message) => {
     try {
-      const msg = message.toString();
-      console.log(`📨 收到消息 from ${clientId}: ${msg.substring(0, 100)}...`);
-      
-      // 如果是 ping 消息，回复 pong
-      if (msg.includes('"type":"ping"')) {
-        ws.send(JSON.stringify({ type: "pong" }));
+      const msg = JSON.parse(message.toString());
+      console.log(`📨 收到消息 from ${clientId}:`, msg);
+
+      // 处理连接请求
+      if (msg.type === 'connect') {
+        const targetWs = clients.get(msg.targetId);
+        if (targetWs) {
+          // 通知目标客户端
+          targetWs.send(JSON.stringify({
+            type: 'connection-request',
+            fromId: clientId
+          }));
+          // 通知发起方
+          ws.send(JSON.stringify({
+            type: 'connecting',
+            targetId: msg.targetId
+          }));
+        } else {
+          // 目标客户端不存在
+          ws.send(JSON.stringify({
+            type: 'error',
+            message: '对方不在线'
+          }));
+        }
       }
     } catch (e) {
       console.error('消息解析错误:', e);
     }
   });
+
+  // 连接关闭处理
+  ws.on('close', () => {
+    console.log(`🔴 客户端断开连接，IP: ${clientIp}, ID: ${clientId}`);
+    clients.delete(clientId);
+  });
+});
 
   // 定期发送心跳包
   const interval = setInterval(() => {
