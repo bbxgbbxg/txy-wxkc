@@ -10,10 +10,7 @@ const server = app.listen(port, '0.0.0.0', () => {
 });
 
 // 创建 WebSocket 服务器
-const wss = new WebSocketServer({
-  server,
-  clientTracking: true
-});
+const wss = new WebSocketServer({ server });
 
 // 存储客户端连接
 const clients = new Map();
@@ -46,26 +43,21 @@ wss.on('connection', (ws, request) => {
       const msg = JSON.parse(message.toString());
       console.log(`📨 收到消息 from ${clientId}:`, msg);
 
-      // 处理连接请求
       if (msg.type === 'connect') {
         const targetWs = clients.get(msg.targetId);
         if (targetWs) {
-          // 只发送给目标客户端
           targetWs.send(JSON.stringify({
             type: 'connect-request',
             fromId: clientId,
             targetId: msg.targetId
           }));
         } else {
-          // 目标客户端不存在
           ws.send(JSON.stringify({
             type: 'connect-error',
             message: '对方不在线'
           }));
         }
-      }
-      // 处理连接接受
-      else if (msg.type === 'connect-accept') {
+      } else if (msg.type === 'connect-accept') {
         const sourceWs = clients.get(msg.targetId);
         if (sourceWs) {
           sourceWs.send(JSON.stringify({
@@ -73,9 +65,7 @@ wss.on('connection', (ws, request) => {
             fromId: clientId
           }));
         }
-      }
-      // 处理连接拒绝
-      else if (msg.type === 'connect-reject') {
+      } else if (msg.type === 'connect-reject') {
         const sourceWs = clients.get(msg.targetId);
         if (sourceWs) {
           sourceWs.send(JSON.stringify({
